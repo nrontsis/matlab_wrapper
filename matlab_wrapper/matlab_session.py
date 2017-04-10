@@ -34,6 +34,7 @@ import ctypes
 from ctypes import c_char_p, POINTER, c_size_t, c_bool, c_void_p, c_int
 
 from matlab_wrapper.typeconv import dtype_to_mat
+import pdb
 
 
 class mxArray(ctypes.Structure):
@@ -171,12 +172,12 @@ class MatlabSession(object):
 
 
         ### Evaluate the expression
-        self._libeng.engEvalString(self._ep, expression_wrapped)
+        self._libeng.engEvalString(self._ep, expression_wrapped.encode())
 
         ### Check for exceptions in MATLAB
-        mxresult = self._libeng.engGetVariable(self._ep, 'ERRSTR__')
+        mxresult = self._libeng.engGetVariable(self._ep, 'ERRSTR__'.encode())
 
-        error_string = self._libmx.mxArrayToString(mxresult)
+        error_string = self._libmx.mxArrayToString(mxresult).decode()
 
         self._libmx.mxDestroyArray(mxresult)
 
@@ -199,7 +200,7 @@ class MatlabSession(object):
             Value of the variable `name`.
 
         """
-        pm = self._libeng.engGetVariable(self._ep, name)
+        pm = self._libeng.engGetVariable(self._ep, name.encode())
 
         out = mxarray_to_ndarray(self._libmx, pm)
 
@@ -218,7 +219,7 @@ class MatlabSession(object):
 
         pm = ndarray_to_mxarray(self._libmx, value)
 
-        self._libeng.engPutVariable(self._ep, name, pm)
+        self._libeng.engPutVariable(self._ep, name.encode(), pm)
 
         self._libmx.mxDestroyArray(pm)
 
@@ -345,7 +346,7 @@ def load_engine_and_libs(matlab_root, options):
     ### Check MATLAB version
     try:
         version_str = c_char_p.in_dll(libeng, "libeng_version").value
-        version = tuple([int(v) for v in version_str.split('.')[:2]])
+        version = tuple([int(v) for v in str(version_str).split('.')[:2]])
 
     except ValueError:
         warnings.warn("Unable to identify MATLAB (libeng) version.")
@@ -358,7 +359,7 @@ def load_engine_and_libs(matlab_root, options):
         warnings.warn("You are using MATLAB version 8.3 (R2014a) on OS X, which appears to have a bug in engGetVariable().  You will only be able to use arrays of type double.")
 
     ### Start the engine
-    engine = libeng.engOpen(command)
+    engine = libeng.engOpen(command.encode())
 
     return engine, libeng, libmx, version
 
@@ -675,7 +676,7 @@ def ndarray_to_mxarray(libmx, arr):
 
     ### Prepare `arr` object (convert to ndarray if possible), assert
     ### data type
-    if isinstance(arr, str) or isinstance(arr, unicode):
+    if isinstance(arr, str):
         pass
 
     elif isinstance(arr, dict):
@@ -702,9 +703,6 @@ def ndarray_to_mxarray(libmx, arr):
     ### Convert ndarray to mxarray
     if isinstance(arr, str):
         pm = libmx.mxCreateString(arr)
-
-    elif isinstance(arr, unicode):
-        pm = libmx.mxCreateString(arr.encode('utf-8'))
 
     elif isinstance(arr, np.ndarray) and arr.dtype.kind in ['i','u','f','c']:
         dim = arr.ctypes.shape_as(mwSize)
